@@ -1,0 +1,36 @@
+LOGYM MOBILE — VISUAL EQUIVALENTE AO WEB
+
+Base utilizada:
+- logym-mobile(3).zip enviado pelo usuário
+- logym-frontend(4).zip como referência visual
+
+Objetivo desta versão:
+- aproximar visualmente o Mobile do Web atual sem trocar arquitetura,
+  endpoints, sessão Spring/JSESSIONID ou regras de acesso.
+
+Principais mudanças:
+- background-logym.png original do Web aplicado no Mobile;
+- predominância de branco/fundo claro, com preto como contraste;
+- laranja #f97316 mantido como destaque principal;
+- Home/Academias com cabeçalho claro, busca, filtros e cards compactos;
+- mapa da Home mantido dentro da rolagem e com 150px no Expo Web;
+- Detalhes reorganizado em cards claros com CNPJ, CEP, endereço,
+  mapa, contato, categorias, facilidades, galeria e avaliações;
+- Favoritos, Perfil, Login e Painel convertidos para o mesmo padrão visual;
+- BottomTabBar branca/flutuante e fixa no rodapé no Expo Web;
+- perfil e permissões usam os valores reais USER / MANAGER / ADMIN;
+- loading, erros e estados vazios receberam visual claro e consistente.
+
+Importante:
+O projeto Mobile enviado nesta versão não continha os arquivos de comparação
+(app/comparar-academias.tsx, components/ComparisonBar.tsx e lib/comparacao.ts).
+Por isso esta entrega não inventa/recria essa funcionalidade nesta base.
+
+Validações executadas:
+- npx tsc --noEmit: OK
+- Expo export Web via node node_modules/expo/bin/cli export --platform web: OK
+
+Para executar após extrair:
+1. npm install
+2. npx expo start
+3. pressione w para Expo Web ou abra no dispositivo Android/iOS.
