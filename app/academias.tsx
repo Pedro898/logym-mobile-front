@@ -7,7 +7,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
   Image,
   ScrollView,
   Text,
@@ -24,7 +23,7 @@ import UserAvatarPlaceholder from '../components/UserAvatarPlaceholder';
 
 import {
   alternarFavoritoNoBanco,
-  buscarAcademias,
+  buscarAcademiasParaHome,
   buscarAcademiasProximas,
   buscarCategoriasAtivas,
   buscarFacilidadesAtivas,
@@ -34,8 +33,6 @@ import {
   formatarNomeUsuario,
   getFotoPrincipalAcademiaUrl,
   getFotoUsuarioUrl,
-  normalizarCategorias,
-  normalizarFacilidades,
 
   type Academia,
   type AcademiaProxima,
@@ -61,9 +58,6 @@ type AcademiaComFoto = Academia & {
   fotoUrl?: string | null;
 };
 
-type AcademiaListaItem = AcademiaComFoto & {
-  distanciaKm?: number | string | null;
-};
 
 // ================================================================
 // PEGA A PRIMEIRA LETRA DO NOME DA ACADEMIA
@@ -81,26 +75,6 @@ function getInicialAcademia(nome?: string) {
   }
 
   return nomeLimpo.charAt(0).toUpperCase();
-}
-
-// ================================================================
-// NORMALIZA TEXTOS
-//
-// Essa função ajuda na pesquisa.
-//
-// Por exemplo:
-//
-// "Musculação"
-// "musculacao"
-//
-// passam a ser tratados de forma semelhante.
-// ================================================================
-
-function normalizarTexto(texto?: string) {
-  return String(texto || '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
 }
 
 // ================================================================
@@ -248,14 +222,6 @@ function AcademiaSemFoto({
 }
 
 // ================================================================
-// PAGINAÇÃO
-//
-// Igual ao Web: 16 academias por página.
-// ================================================================
-
-const ACADEMIAS_POR_PAGINA = 16;
-
-// ================================================================
 // TELA PRINCIPAL DE ACADEMIAS
 // ================================================================
 
@@ -267,6 +233,7 @@ export default function Academias() {
   // ==============================================================
 
   const [busca, setBusca] = useState('');
+  const [termoPesquisado, setTermoPesquisado] = useState('');
 
   // ==============================================================
   // CATEGORIAS
@@ -330,6 +297,10 @@ export default function Academias() {
     paginaAtual,
     setPaginaAtual,
   ] = useState(0);
+
+  const [totalPaginas, setTotalPaginas] = useState(0);
+  const [totalResultados, setTotalResultados] = useState(0);
+  const [versaoAcademias, setVersaoAcademias] = useState(0);
 
   // ==============================================================
   // USUÁRIO
@@ -586,88 +557,27 @@ export default function Academias() {
         }
 
         // ========================================================
-        // ACADEMIAS
+        // FAVORITOS
         // ========================================================
 
-        try {
-          setCarregandoAcademias(true);
+        if (usuarioLogado?.id && ehUsuarioComum(usuarioLogado)) {
+          try {
+            const academiasFavoritas =
+              await buscarFavoritosDoUsuario(usuarioLogado.id);
 
-          setErroAcademias('');
-
-          // ======================================================
-          // FAVORITOS
-          // ======================================================
-
-          if (usuarioLogado?.id && ehUsuarioComum(usuarioLogado)) {
-            try {
-              const academiasFavoritas =
-                await buscarFavoritosDoUsuario(
-                  usuarioLogado.id
-                );
-
-              setFavoritos(
-                extrairIdsAcademiasFavoritas(
-                  academiasFavoritas
-                )
-              );
-            } catch (error) {
-              console.error(
-                'Erro ao buscar favoritos:',
-                error
-              );
-
-              setFavoritos([]);
-            }
-          } else {
+            setFavoritos(
+              extrairIdsAcademiasFavoritas(academiasFavoritas)
+            );
+          } catch (error) {
+            console.error('Erro ao buscar favoritos:', error);
             setFavoritos([]);
           }
-
-          // ======================================================
-          // BUSCA DAS ACADEMIAS
-          //
-          // Mesmo fluxo da Home Web atual:
-          // GET /academias carrega todas as academias ativas para
-          // os cards, independentemente do nível de acesso.
-          //
-          // A rota de proximidade NÃO substitui essa lista. Ela
-          // será usada separadamente na etapa do mapa/distância.
-          // ======================================================
-
-          const lista =
-            await buscarAcademias();
-
-          // ======================================================
-          // FOTO PRINCIPAL
-          //
-          // O backend atual já envia fotoPrincipal junto com cada
-          // academia. Assim como no Web, não precisamos fazer uma
-          // requisição adicional de fotos para cada card.
-          // ======================================================
-
-          const listaComFotos =
-            lista.map(
-              (academia) => ({
-                ...academia,
-                fotoUrl:
-                  getFotoPrincipalAcademiaUrl(
-                    academia.fotoPrincipal
-                  ),
-              })
-            );
-
-          setAcademias(listaComFotos);
-        } catch (error) {
-          console.error(
-            'Erro ao carregar academias:',
-            error
-          );
-
-          setErroAcademias(
-            'Não foi possível carregar as academias do banco.'
-          );
-        } finally {
-          setCarregandoAcademias(false);
+        } else {
+          setFavoritos([]);
         }
+
+        // Força a atualização da lista ao voltar de detalhes, perfil etc.
+        setVersaoAcademias((versaoAtual) => versaoAtual + 1);
       }
 
       carregarDados();
@@ -738,510 +648,175 @@ export default function Academias() {
   // LIMPAR PESQUISA E FILTROS
   // ==============================================================
 
+  function aplicarBusca() {
+    setPaginaAtual(0);
+    setTermoPesquisado(busca.trim());
+  }
+
+  function limparBusca() {
+    setBusca('');
+    setTermoPesquisado('');
+    setPaginaAtual(0);
+  }
+
   function limparFiltros() {
     setCategoriasSelecionadas([]);
-
     setFacilidadesSelecionadas([]);
-
-    setBusca('');
-
     setPaginaAtual(0);
   }
 
   useEffect(() => {
     setPaginaAtual(0);
   }, [
-    busca,
+    termoPesquisado,
     categoriasSelecionadas,
     facilidadesSelecionadas,
   ]);
 
   // ==============================================================
-  // VERIFICA SE A ACADEMIA POSSUI UMA CATEGORIA
-  // ==============================================================
-
-  function academiaPossuiCategoria(
-    academia: Academia,
-    categoria: Categoria
-  ) {
-    // ============================================================
-    // MODELO NOVO - IDS
-    // ============================================================
-
-    if (
-      Array.isArray(
-        academia.categoriaIds
-      ) &&
-      academia.categoriaIds
-        .length > 0
-    ) {
-      return academia.categoriaIds.some(
-        (id) =>
-          String(id) ===
-          String(categoria.id)
-      );
-    }
-
-    // ============================================================
-    // MODELO NOVO - OBJETOS VINCULADOS
-    // ============================================================
-
-    if (
-      Array.isArray(
-        academia.categoriasVinculadas
-      ) &&
-      academia
-        .categoriasVinculadas
-        .length > 0
-    ) {
-      return academia.categoriasVinculadas.some(
-        (item) =>
-          String(item.id) ===
-            String(categoria.id) ||
-          normalizarTexto(
-            item.nome
-          ) ===
-            normalizarTexto(
-              categoria.nome
-            )
-      );
-    }
-
-    // ============================================================
-    // MODELO ANTIGO - STRING
-    // ============================================================
-
-    const antigas =
-      normalizarCategorias(
-        academia.categorias
-      );
-
-    return antigas.some(
-      (nome) =>
-        normalizarTexto(
-          nome
-        ) ===
-        normalizarTexto(
-          categoria.nome
-        )
-    );
-  }
-
-  // ==============================================================
-  // VERIFICA SE A ACADEMIA POSSUI UMA FACILIDADE
-  // ==============================================================
-
-  function academiaPossuiFacilidade(
-    academia: Academia,
-    facilidade: Facilidade
-  ) {
-    // ============================================================
-    // MODELO NOVO - IDS
-    // ============================================================
-
-    if (
-      Array.isArray(
-        academia.facilidadeIds
-      ) &&
-      academia.facilidadeIds
-        .length > 0
-    ) {
-      return academia.facilidadeIds.some(
-        (id) =>
-          String(id) ===
-          String(
-            facilidade.id
-          )
-      );
-    }
-
-    // ============================================================
-    // MODELO NOVO - OBJETOS VINCULADOS
-    // ============================================================
-
-    if (
-      Array.isArray(
-        academia.facilidadesVinculadas
-      ) &&
-      academia
-        .facilidadesVinculadas
-        .length > 0
-    ) {
-      return academia.facilidadesVinculadas.some(
-        (item) =>
-          String(item.id) ===
-            String(
-              facilidade.id
-            ) ||
-          normalizarTexto(
-            item.nome
-          ) ===
-            normalizarTexto(
-              facilidade.nome
-            )
-      );
-    }
-
-    // ============================================================
-    // MODELO ANTIGO - STRING
-    // ============================================================
-
-    const antigas =
-      normalizarFacilidades(
-        academia.facilidades
-      );
-
-    return antigas.some(
-      (nome) =>
-        normalizarTexto(
-          nome
-        ) ===
-        normalizarTexto(
-          facilidade.nome
-        )
-    );
-  }
-
-  // ==============================================================
-  // CRIA O TEXTO UTILIZADO NA PESQUISA
-  // ==============================================================
-
-  function criarTextoPesquisavel(
-    academia: Academia
-  ) {
-    const nomesCategorias = [
-      ...(
-        academia.categoriasVinculadas ||
-        []
-      ).map(
-        (item) => item.nome
-      ),
-
-      ...normalizarCategorias(
-        academia.categorias
-      ),
-    ].join(' ');
-
-    const nomesFacilidades = [
-      ...(
-        academia.facilidadesVinculadas ||
-        []
-      ).map(
-        (item) => item.nome
-      ),
-
-      ...normalizarFacilidades(
-        academia.facilidades
-      ),
-    ].join(' ');
-
-    return normalizarTexto(`
-      ${academia.nome}
-      ${academia.endereco}
-      ${academia.numero || ''}
-      ${academia.complemento || ''}
-      ${academia.bairro || ''}
-      ${academia.cidade}
-      ${academia.estado || ''}
-      ${academia.cep}
-      ${academia.descricao || ''}
-      ${nomesCategorias}
-      ${nomesFacilidades}
-    `);
-  }
-
-  // ==============================================================
-  // FILTRAGEM DAS ACADEMIAS
-  // ==============================================================
-
-  const academiasFiltradas =
-    academias.filter(
-      (academia) => {
-        // ========================================================
-        // PESQUISA
-        // ========================================================
-
-        const termoBusca =
-          normalizarTexto(
-            busca.trim()
-          );
-
-        const correspondeBusca =
-          termoBusca
-            ? criarTextoPesquisavel(
-                academia
-              ).includes(
-                termoBusca
-              )
-            : true;
-
-        // ========================================================
-        // CATEGORIAS
-        // ========================================================
-
-        const correspondeCategorias =
-          categoriasSelecionadas
-            .length > 0
-            ? categoriasSelecionadas.every(
-                (
-                  categoriaId
-                ) => {
-                  const categoria =
-                    categorias.find(
-                      (item) =>
-                        String(
-                          item.id
-                        ) ===
-                        categoriaId
-                    );
-
-                  return categoria
-                    ? academiaPossuiCategoria(
-                        academia,
-                        categoria
-                      )
-                    : false;
-                }
-              )
-            : true;
-
-        // ========================================================
-        // FACILIDADES
-        // ========================================================
-
-        const correspondeFacilidades =
-          facilidadesSelecionadas
-            .length > 0
-            ? facilidadesSelecionadas.every(
-                (
-                  facilidadeId
-                ) => {
-                  const facilidade =
-                    facilidades.find(
-                      (item) =>
-                        String(
-                          item.id
-                        ) ===
-                        facilidadeId
-                    );
-
-                  return facilidade
-                    ? academiaPossuiFacilidade(
-                        academia,
-                        facilidade
-                      )
-                    : false;
-                }
-              )
-            : true;
-
-        return (
-          correspondeBusca &&
-          correspondeCategorias &&
-          correspondeFacilidades
-        );
-      }
-    );
-
-  // ==============================================================
-  // ACADEMIAS UNIFICADAS
+  // ACADEMIAS DA HOME
   //
-  // Mesmo comportamento do Web:
-  // 1. academias próximas que também passaram pelos filtros;
-  // 2. demais academias filtradas;
-  // 3. distanciaKm fica disponível somente nas academias próximas.
+  // Busca, filtros e paginação são processados pelo backend,
+  // exatamente como no Web atual.
   // ==============================================================
-
-  const academiasUnificadas = useMemo<AcademiaListaItem[]>(() => {
-    const academiasFiltradasPorId = new Map(
-      academiasFiltradas.map((academia) => [
-        String(academia.id),
-        academia,
-      ])
-    );
-
-    const idsAcademiasProximas = new Set<string>();
-    const proximas: AcademiaListaItem[] = [];
-
-    academiasProximas.forEach(
-      ({ academia, distanciaKm }) => {
-        if (
-          academia?.id === null ||
-          academia?.id === undefined
-        ) {
-          return;
-        }
-
-        const idAcademia = String(academia.id);
-        const academiaFiltrada =
-          academiasFiltradasPorId.get(idAcademia);
-
-        if (
-          !academiaFiltrada ||
-          idsAcademiasProximas.has(idAcademia)
-        ) {
-          return;
-        }
-
-        idsAcademiasProximas.add(idAcademia);
-
-        proximas.push({
-          ...academiaFiltrada,
-          distanciaKm,
-        });
-      }
-    );
-
-    const restantes: AcademiaListaItem[] =
-      academiasFiltradas
-        .filter(
-          (academia) =>
-            !idsAcademiasProximas.has(
-              String(academia.id)
-            )
-        )
-        .map((academia) => ({
-          ...academia,
-          distanciaKm: null,
-        }));
-
-    return [...proximas, ...restantes];
-  }, [academiasFiltradas, academiasProximas]);
-
-  const totalPaginas =
-    Math.ceil(
-      academiasUnificadas.length /
-        ACADEMIAS_POR_PAGINA
-    );
 
   useEffect(() => {
-    if (
-      totalPaginas > 0 &&
-      paginaAtual >= totalPaginas
-    ) {
-      setPaginaAtual(
-        totalPaginas - 1
-      );
+    if (!usuario?.id) {
+      return;
     }
-  }, [
-    paginaAtual,
-    totalPaginas,
-  ]);
 
-  const academiasPaginaAtual =
-    useMemo(
-      () => {
-        const inicio =
-          paginaAtual *
-          ACADEMIAS_POR_PAGINA;
+    let requisicaoAtiva = true;
 
-        return academiasUnificadas.slice(
-          inicio,
-          inicio +
-            ACADEMIAS_POR_PAGINA
-        );
-      },
-      [
-        academiasUnificadas,
-        paginaAtual,
-      ]
-    );
+    async function carregarAcademiasDaHome() {
+      try {
+        setCarregandoAcademias(true);
+        setErroAcademias('');
 
-  const paginasVisiveis =
-    useMemo<
-      Array<number | string>
-    >(
-      () => {
-        if (totalPaginas <= 7) {
-          return Array.from(
-            {
-              length:
-                totalPaginas,
-            },
-            (
-              _,
-              index
-            ) => index
-          );
+        const pagina = await buscarAcademiasParaHome({
+          page: paginaAtual,
+          search: termoPesquisado,
+          categorias: categoriasSelecionadas,
+          facilidades: facilidadesSelecionadas,
+        });
+
+        if (!requisicaoAtiva) {
+          return;
         }
 
-        const paginas =
-          new Set<number>([
-            0,
-            totalPaginas - 1,
-            paginaAtual - 1,
-            paginaAtual,
-            paginaAtual + 1,
-          ]);
+        if (
+          !Array.isArray(pagina?.content) ||
+          !Number.isInteger(pagina?.page) ||
+          !Number.isInteger(pagina?.totalPages) ||
+          typeof pagina?.totalElements !== 'number'
+        ) {
+          console.error(
+            'Resposta inesperada ao carregar academias:',
+            pagina
+          );
 
-        const ordenadas =
-          [...paginas]
-            .filter(
-              (pagina) =>
-                pagina >= 0 &&
-                pagina <
-                  totalPaginas
-            )
-            .sort(
-              (a, b) =>
-                a - b
-            );
+          setAcademias([]);
+          setTotalPaginas(0);
+          setTotalResultados(0);
+          setErroAcademias('Erro ao carregar academias.');
+          return;
+        }
 
-        return ordenadas.reduce<
-          Array<
-            number |
-            string
-          >
-        >(
-          (
-            itens,
-            pagina,
-            index
-          ) => {
-            if (
-              index > 0 &&
-              pagina -
-                ordenadas[
-                  index - 1
-                ] >
-                1
-            ) {
-              itens.push(
-                `ellipsis-${pagina}`
-              );
-            }
-
-            itens.push(
-              pagina
-            );
-
-            return itens;
-          },
-          []
+        const listaComFotos: AcademiaComFoto[] = pagina.content.map(
+          (academia) => ({
+            ...academia,
+            fotoUrl: getFotoPrincipalAcademiaUrl(
+              academia.fotoPrincipal
+            ),
+          })
         );
-      },
-      [
-        paginaAtual,
-        totalPaginas,
-      ]
-    );
 
-  function trocarPagina(
-    novaPagina: number
-  ) {
+        setAcademias(listaComFotos);
+        setTotalPaginas(pagina.totalPages);
+        setTotalResultados(pagina.totalElements);
+      } catch (error) {
+        if (!requisicaoAtiva) {
+          return;
+        }
+
+        console.error('Erro ao carregar academias:', error);
+        setAcademias([]);
+        setTotalPaginas(0);
+        setTotalResultados(0);
+        setErroAcademias(
+          'Não foi possível carregar as academias do banco.'
+        );
+      } finally {
+        if (requisicaoAtiva) {
+          setCarregandoAcademias(false);
+        }
+      }
+    }
+
+    carregarAcademiasDaHome();
+
+    return () => {
+      requisicaoAtiva = false;
+    };
+  }, [
+    usuario?.id,
+    paginaAtual,
+    termoPesquisado,
+    categoriasSelecionadas,
+    facilidadesSelecionadas,
+    versaoAcademias,
+  ]);
+
+  const paginasVisiveis = useMemo<Array<number | string>>(
+    () => {
+      if (totalPaginas <= 7) {
+        return Array.from(
+          { length: totalPaginas },
+          (_, index) => index
+        );
+      }
+
+      const paginas = new Set<number>([
+        0,
+        totalPaginas - 1,
+        paginaAtual - 1,
+        paginaAtual,
+        paginaAtual + 1,
+      ]);
+
+      const ordenadas = [...paginas]
+        .filter(
+          (pagina) => pagina >= 0 && pagina < totalPaginas
+        )
+        .sort((a, b) => a - b);
+
+      return ordenadas.reduce<Array<number | string>>(
+        (itens, pagina, index) => {
+          if (
+            index > 0 &&
+            pagina - ordenadas[index - 1] > 1
+          ) {
+            itens.push(`ellipsis-${pagina}`);
+          }
+
+          itens.push(pagina);
+          return itens;
+        },
+        []
+      );
+    },
+    [paginaAtual, totalPaginas]
+  );
+
+  function trocarPagina(novaPagina: number) {
     if (
       novaPagina < 0 ||
-      novaPagina >=
-        totalPaginas ||
-      novaPagina ===
-        paginaAtual
+      novaPagina >= totalPaginas ||
+      novaPagina === paginaAtual
     ) {
       return;
     }
 
-    setPaginaAtual(
-      novaPagina
-    );
+    setPaginaAtual(novaPagina);
   }
 
   // ==============================================================
@@ -1423,6 +998,15 @@ export default function Academias() {
           paddingBottom: 86,
         }}
       >
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{
+            paddingBottom:
+              ehUsuarioComum(usuario) && academiasComparacao.length > 0
+                ? 190
+                : 100,
+          }}
+        >
         <View
           style={{
             backgroundColor: 'rgba(255,255,255,0.96)',
@@ -1523,26 +1107,104 @@ export default function Academias() {
             style={{
               flexDirection: 'row',
               alignItems: 'center',
-              backgroundColor: '#fafafa',
-              borderRadius: 12,
-              paddingHorizontal: 13,
-              borderWidth: 1,
-              borderColor: '#bdbdbd',
+              gap: 8,
             }}
           >
-            <Ionicons name="search" size={20} color="#f97316" />
-            <TextInput
-              placeholder="Nome, endereço, cidade..."
-              placeholderTextColor="#888"
-              value={busca}
-              onChangeText={setBusca}
+            <View
               style={{
                 flex: 1,
-                color: '#111',
-                marginLeft: 9,
-                minHeight: 46,
+                flexShrink: 1,
+                minWidth: 0,
+                minHeight: 38,
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: '#fafafa',
+                borderRadius: 10,
+                paddingHorizontal: 11,
+                borderWidth: 1,
+                borderColor: '#bdbdbd',
+                overflow: 'hidden',
               }}
-            />
+            >
+              <Ionicons name="search" size={18} color="#f97316" />
+
+              <TextInput
+                placeholder="Nome, endereço, cidade..."
+                placeholderTextColor="#888"
+                value={busca}
+                onChangeText={setBusca}
+                onSubmitEditing={aplicarBusca}
+                returnKeyType="search"
+                style={[
+                  {
+                    flex: 1,
+                    flexShrink: 1,
+                    minWidth: 0,
+                    color: '#111',
+                    marginLeft: 8,
+                    minHeight: 38,
+                    fontSize: 13,
+                    paddingVertical: 0,
+                  },
+                  {
+                    outlineStyle: 'none',
+                    outlineWidth: 0,
+                  } as any,
+                ]}
+              />
+            </View>
+
+            <TouchableOpacity
+              onPress={aplicarBusca}
+              activeOpacity={0.85}
+              style={{
+                height: 38,
+                borderRadius: 10,
+                backgroundColor: '#f97316',
+                borderWidth: 1,
+                borderColor: '#f97316',
+                paddingHorizontal: 14,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Text
+                style={{
+                  color: '#000',
+                  fontSize: 13,
+                  fontWeight: '800',
+                }}
+              >
+                Buscar
+              </Text>
+            </TouchableOpacity>
+
+            {termoPesquisado.length > 0 ? (
+              <TouchableOpacity
+                onPress={limparBusca}
+                activeOpacity={0.85}
+                style={{
+                  height: 38,
+                  borderRadius: 10,
+                  backgroundColor: '#fff',
+                  borderWidth: 1,
+                  borderColor: '#111',
+                  paddingHorizontal: 10,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text
+                  style={{
+                    color: '#111',
+                    fontSize: 12,
+                    fontWeight: '800',
+                  }}
+                >
+                  Limpar busca
+                </Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
 
           <View
@@ -1558,8 +1220,7 @@ export default function Academias() {
               Filtros rápidos
             </Text>
             {(categoriasSelecionadas.length > 0 ||
-              facilidadesSelecionadas.length > 0 ||
-              busca.length > 0) && (
+              facilidadesSelecionadas.length > 0) && (
               <TouchableOpacity onPress={limparFiltros}>
                 <Text style={{ color: '#ea580c', fontWeight: '900' }}>
                   Limpar
@@ -1665,10 +1326,129 @@ export default function Academias() {
             }}
           >
             <Text style={{ color: '#555', fontSize: 13 }}>
-              {academiasUnificadas.length} academia(s) encontrada(s)
+              {totalResultados} academia(s) encontrada(s)
             </Text>
           </View>
         </View>
+
+        {ehUsuarioComum(usuario) ? (
+          <View
+            style={{
+              backgroundColor: 'rgba(255,255,255,0.97)',
+              borderRadius: 18,
+              borderWidth: 1,
+              borderColor: '#ddd',
+              padding: 10,
+              marginBottom: 13,
+              shadowColor: '#000',
+              shadowOpacity: 0.08,
+              shadowRadius: 8,
+              elevation: 3,
+            }}
+          >
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                marginBottom: 8,
+                paddingHorizontal: 3,
+              }}
+            >
+              <Ionicons
+                name="location"
+                size={18}
+                color="#f97316"
+              />
+              <Text
+                style={{
+                  color: '#111',
+                  fontWeight: '900',
+                  fontSize: 14,
+                  marginLeft: 5,
+                }}
+              >
+                Academias próximas de você
+              </Text>
+            </View>
+
+            {carregandoAcademiasProximas ? (
+              <View
+                style={{
+                  paddingVertical: 12,
+                  paddingHorizontal: 14,
+                  backgroundColor: '#fff7ed',
+                  borderWidth: 1,
+                  borderColor: '#f97316',
+                  borderRadius: 10,
+                }}
+              >
+                <Text
+                  style={{
+                    color: '#000',
+                    textAlign: 'center',
+                    fontSize: 13,
+                  }}
+                >
+                  Carregando academias próximas...
+                </Text>
+              </View>
+            ) : mensagemAcademiasProximas ? (
+              <View
+                style={{
+                  paddingVertical: 12,
+                  paddingHorizontal: 14,
+                  backgroundColor: '#fff7ed',
+                  borderWidth: 1,
+                  borderColor: '#f97316',
+                  borderRadius: 10,
+                }}
+              >
+                <Text
+                  style={{
+                    color: '#000',
+                    textAlign: 'center',
+                    fontSize: 13,
+                  }}
+                >
+                  {mensagemAcademiasProximas}
+                </Text>
+              </View>
+            ) : academiasProximas.length === 0 ? (
+              <View
+                style={{
+                  paddingVertical: 12,
+                  paddingHorizontal: 14,
+                  backgroundColor: '#fff7ed',
+                  borderWidth: 1,
+                  borderColor: '#f97316',
+                  borderRadius: 10,
+                }}
+              >
+                <Text
+                  style={{
+                    color: '#000',
+                    textAlign: 'center',
+                    fontSize: 13,
+                  }}
+                >
+                  Nenhuma academia encontrada em até 5 km da sua localização.
+                </Text>
+              </View>
+            ) : (
+              <NearbyAcademiesMap
+                userLatitude={usuario?.latitude}
+                userLongitude={usuario?.longitude}
+                academiasProximas={academiasProximas}
+                onAcademiaPress={(academiaId) =>
+                  router.push({
+                    pathname: '/detalhes',
+                    params: { id: String(academiaId) },
+                  })
+                }
+              />
+            )}
+          </View>
+        ) : null}
 
         {carregandoAcademias ? (
           <View
@@ -1701,7 +1481,7 @@ export default function Academias() {
               {erroAcademias}
             </Text>
           </View>
-        ) : academiasUnificadas.length === 0 ? (
+        ) : totalResultados === 0 ? (
           <View
             style={{
               marginTop: 18,
@@ -1717,116 +1497,214 @@ export default function Academias() {
             </Text>
           </View>
         ) : (
-          <FlatList
-            data={academiasPaginaAtual}
-            keyExtractor={(item) => String(item.id)}
-            showsVerticalScrollIndicator={false}
-            ListHeaderComponent={
-              ehUsuarioComum(usuario) ? (
-                <View
+          <View>
+            {academias.map((item) => (
+              <View key={String(item.id)}>
+                <TouchableOpacity
+                  onPress={() =>
+                    router.push({
+                      pathname: '/detalhes',
+                      params: { id: String(item.id) },
+                    })
+                  }
+                  activeOpacity={0.88}
                   style={{
-                    backgroundColor: 'rgba(255,255,255,0.97)',
-                    borderRadius: 18,
+                    flexDirection: 'row',
+                    height: 132,
+                    backgroundColor: '#ffffff',
+                    borderRadius: 16,
+                    marginBottom: 12,
+                    overflow: 'hidden',
                     borderWidth: 1,
-                    borderColor: '#ddd',
-                    padding: 10,
-                    marginBottom: 13,
+                    borderColor: '#d7d7d7',
                     shadowColor: '#000',
-                    shadowOpacity: 0.08,
-                    shadowRadius: 8,
-                    elevation: 3,
+                    shadowOffset: { width: 0, height: 3 },
+                    shadowOpacity: 0.10,
+                    shadowRadius: 7,
+                    elevation: 4,
                   }}
                 >
+                  {item.fotoUrl ? (
+                    <Image
+                      source={{ uri: item.fotoUrl }}
+                      style={{
+                        width: 132,
+                        height: '100%',
+                        backgroundColor: '#f3f4f6',
+                      }}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <AcademiaSemFoto nome={item.nome} />
+                  )}
+  
                   <View
                     style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      marginBottom: 8,
-                      paddingHorizontal: 3,
+                      flex: 1,
+                      paddingHorizontal: 9,
+                      paddingVertical: 7,
+                      justifyContent: 'space-between',
                     }}
                   >
-                    <Ionicons name="location" size={18} color="#f97316" />
-                    <Text
-                      style={{
-                        color: '#111',
-                        fontWeight: '900',
-                        fontSize: 14,
-                        marginLeft: 5,
-                      }}
-                    >
-                      Academias próximas de você
-                    </Text>
+                    <View>
+                      <Text
+                        numberOfLines={1}
+                        style={{
+                          color: '#000000',
+                          fontSize: 15,
+                          lineHeight: 18,
+                          fontWeight: '900',
+                        }}
+                      >
+                        {item.nome}
+                      </Text>
+                      <Text
+                        numberOfLines={1}
+                        style={{ color: '#555', fontSize: 11, lineHeight: 14, marginTop: 1 }}
+                      >
+                        {item.endereco}{item.numero ? `, ${item.numero}` : ''}
+                      </Text>
+                      <Text
+                        numberOfLines={1}
+                        style={{ color: '#666', fontSize: 11, lineHeight: 14 }}
+                      >
+                        {item.bairro ? `${item.bairro} - ` : ''}{item.cidade}
+                        {item.estado ? `, ${item.estado}` : ''}
+                      </Text>
+  
+                      <View style={{ height: 15, justifyContent: 'center' }}>
+                        {formatarDistancia(item.distanciaKm) ? (
+                          <Text
+                            numberOfLines={1}
+                            style={{ color: '#111', fontWeight: '800', fontSize: 11, lineHeight: 14 }}
+                          >
+                            {formatarDistancia(item.distanciaKm)}
+                          </Text>
+                        ) : null}
+                      </View>
+  
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 6,
+                        }}
+                      >
+                        <Text
+                          numberOfLines={1}
+                          style={{ color: '#ea580c', fontSize: 10, lineHeight: 13, flexShrink: 1 }}
+                        >
+                          CEP: {formatarCep(item.cep)}
+                        </Text>
+                        {item.nota !== null && item.nota !== undefined ? (
+                          <Text
+                            numberOfLines={1}
+                            style={{ color: '#111', fontSize: 11, lineHeight: 13, fontWeight: '900' }}
+                          >
+                            {Number(item.nota).toFixed(1)} ⭐
+                          </Text>
+                        ) : (
+                          <Text numberOfLines={1} style={{ color: '#888', fontSize: 10, lineHeight: 13 }}>
+                            Sem avaliações
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+  
+                    {ehUsuarioComum(usuario) ? (
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: 7,
+                        }}
+                      >
+                        <TouchableOpacity
+                          onPress={(event) => {
+                            event.stopPropagation();
+                            alternarComparacao(item);
+                          }}
+                          style={{
+                            flex: 1,
+                            minHeight: 29,
+                            borderWidth: 1,
+                            borderColor:
+                              academiaEstaSelecionadaParaComparacao(
+                                academiasComparacao,
+                                item.id
+                              )
+                                ? '#f97316'
+                                : '#000',
+                            borderRadius: 6,
+                            backgroundColor:
+                              academiaEstaSelecionadaParaComparacao(
+                                academiasComparacao,
+                                item.id
+                              )
+                                ? '#f97316'
+                                : '#fff',
+                            paddingHorizontal: 6,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <Text
+                            numberOfLines={1}
+                            adjustsFontSizeToFit
+                            minimumFontScale={0.72}
+                            style={{
+                              color: '#000',
+                              fontSize: 10,
+                              fontWeight: '900',
+                            }}
+                          >
+                            {academiaEstaSelecionadaParaComparacao(
+                              academiasComparacao,
+                              item.id
+                            )
+                              ? 'Remover da comparação'
+                              : 'Comparar'}
+                          </Text>
+                        </TouchableOpacity>
+  
+                        <TouchableOpacity
+                          onPress={(event) => {
+                            event.stopPropagation();
+                            alternarFavorito(item.id);
+                          }}
+                          style={{
+                            width: 29,
+                            height: 29,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            backgroundColor: '#fff7ed',
+                            borderRadius: 15,
+                            borderWidth: 1,
+                            borderColor: '#fed7aa',
+                          }}
+                        >
+                          <Ionicons
+                            name={
+                              favoritos.includes(
+                                String(item.id)
+                              )
+                                ? 'star'
+                                : 'star-outline'
+                            }
+                            size={20}
+                            color="#f59e0b"
+                          />
+                        </TouchableOpacity>
+                      </View>
+                    ) : null}
                   </View>
+                </TouchableOpacity>
+              </View>
+            ))}
 
-                  {carregandoAcademiasProximas ? (
-                    <View
-                      style={{
-                        paddingVertical: 12,
-                        paddingHorizontal: 14,
-                        backgroundColor: '#fff7ed',
-                        borderWidth: 1,
-                        borderColor: '#f97316',
-                        borderRadius: 10,
-                      }}
-                    >
-                      <Text style={{ color: '#000', textAlign: 'center', fontSize: 13 }}>
-                        Carregando academias próximas...
-                      </Text>
-                    </View>
-                  ) : mensagemAcademiasProximas ? (
-                    <View
-                      style={{
-                        paddingVertical: 12,
-                        paddingHorizontal: 14,
-                        backgroundColor: '#fff7ed',
-                        borderWidth: 1,
-                        borderColor: '#f97316',
-                        borderRadius: 10,
-                      }}
-                    >
-                      <Text style={{ color: '#000', textAlign: 'center', fontSize: 13 }}>
-                        {mensagemAcademiasProximas}
-                      </Text>
-                    </View>
-                  ) : academiasProximas.length === 0 ? (
-                    <View
-                      style={{
-                        paddingVertical: 12,
-                        paddingHorizontal: 14,
-                        backgroundColor: '#fff7ed',
-                        borderWidth: 1,
-                        borderColor: '#f97316',
-                        borderRadius: 10,
-                      }}
-                    >
-                      <Text style={{ color: '#000', textAlign: 'center', fontSize: 13 }}>
-                        Nenhuma academia encontrada em até 5 km da sua localização.
-                      </Text>
-                    </View>
-                  ) : (
-                    <NearbyAcademiesMap
-                      userLatitude={usuario?.latitude}
-                      userLongitude={usuario?.longitude}
-                      academiasProximas={academiasProximas}
-                      onAcademiaPress={(academiaId) =>
-                        router.push({
-                          pathname: '/detalhes',
-                          params: { id: String(academiaId) },
-                        })
-                      }
-                    />
-                  )}
-                </View>
-              ) : null
-            }
-            contentContainerStyle={{
-              paddingBottom:
-                ehUsuarioComum(usuario) &&
-                academiasComparacao.length > 0
-                  ? 190
-                  : 100,
-            }}
-            ListFooterComponent={
+            {
               totalPaginas > 1 ? (
                 <View
                   style={{
@@ -2010,211 +1888,9 @@ export default function Academias() {
                 </View>
               ) : null
             }
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                onPress={() =>
-                  router.push({
-                    pathname: '/detalhes',
-                    params: { id: String(item.id) },
-                  })
-                }
-                activeOpacity={0.88}
-                style={{
-                  flexDirection: 'row',
-                  height: 132,
-                  backgroundColor: '#ffffff',
-                  borderRadius: 16,
-                  marginBottom: 12,
-                  overflow: 'hidden',
-                  borderWidth: 1,
-                  borderColor: '#d7d7d7',
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 3 },
-                  shadowOpacity: 0.10,
-                  shadowRadius: 7,
-                  elevation: 4,
-                }}
-              >
-                {item.fotoUrl ? (
-                  <Image
-                    source={{ uri: item.fotoUrl }}
-                    style={{
-                      width: 132,
-                      height: '100%',
-                      backgroundColor: '#f3f4f6',
-                    }}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <AcademiaSemFoto nome={item.nome} />
-                )}
-
-                <View
-                  style={{
-                    flex: 1,
-                    paddingHorizontal: 9,
-                    paddingVertical: 7,
-                    justifyContent: 'space-between',
-                  }}
-                >
-                  <View>
-                    <Text
-                      numberOfLines={1}
-                      style={{
-                        color: '#000000',
-                        fontSize: 15,
-                        lineHeight: 18,
-                        fontWeight: '900',
-                      }}
-                    >
-                      {item.nome}
-                    </Text>
-                    <Text
-                      numberOfLines={1}
-                      style={{ color: '#555', fontSize: 11, lineHeight: 14, marginTop: 1 }}
-                    >
-                      {item.endereco}{item.numero ? `, ${item.numero}` : ''}
-                    </Text>
-                    <Text
-                      numberOfLines={1}
-                      style={{ color: '#666', fontSize: 11, lineHeight: 14 }}
-                    >
-                      {item.bairro ? `${item.bairro} - ` : ''}{item.cidade}
-                      {item.estado ? `, ${item.estado}` : ''}
-                    </Text>
-
-                    <View style={{ height: 15, justifyContent: 'center' }}>
-                      {formatarDistancia(item.distanciaKm) ? (
-                        <Text
-                          numberOfLines={1}
-                          style={{ color: '#111', fontWeight: '800', fontSize: 11, lineHeight: 14 }}
-                        >
-                          {formatarDistancia(item.distanciaKm)}
-                        </Text>
-                      ) : null}
-                    </View>
-
-                    <View
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: 6,
-                      }}
-                    >
-                      <Text
-                        numberOfLines={1}
-                        style={{ color: '#ea580c', fontSize: 10, lineHeight: 13, flexShrink: 1 }}
-                      >
-                        CEP: {formatarCep(item.cep)}
-                      </Text>
-                      {item.nota !== null && item.nota !== undefined ? (
-                        <Text
-                          numberOfLines={1}
-                          style={{ color: '#111', fontSize: 11, lineHeight: 13, fontWeight: '900' }}
-                        >
-                          {Number(item.nota).toFixed(1)} ⭐
-                        </Text>
-                      ) : (
-                        <Text numberOfLines={1} style={{ color: '#888', fontSize: 10, lineHeight: 13 }}>
-                          Sem avaliações
-                        </Text>
-                      )}
-                    </View>
-                  </View>
-
-                  {ehUsuarioComum(usuario) ? (
-                    <View
-                      style={{
-                        flexDirection: 'row',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        gap: 7,
-                      }}
-                    >
-                      <TouchableOpacity
-                        onPress={(event) => {
-                          event.stopPropagation();
-                          alternarComparacao(item);
-                        }}
-                        style={{
-                          flex: 1,
-                          minHeight: 29,
-                          borderWidth: 1,
-                          borderColor:
-                            academiaEstaSelecionadaParaComparacao(
-                              academiasComparacao,
-                              item.id
-                            )
-                              ? '#f97316'
-                              : '#000',
-                          borderRadius: 6,
-                          backgroundColor:
-                            academiaEstaSelecionadaParaComparacao(
-                              academiasComparacao,
-                              item.id
-                            )
-                              ? '#f97316'
-                              : '#fff',
-                          paddingHorizontal: 6,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                      >
-                        <Text
-                          numberOfLines={1}
-                          adjustsFontSizeToFit
-                          minimumFontScale={0.72}
-                          style={{
-                            color: '#000',
-                            fontSize: 10,
-                            fontWeight: '900',
-                          }}
-                        >
-                          {academiaEstaSelecionadaParaComparacao(
-                            academiasComparacao,
-                            item.id
-                          )
-                            ? 'Remover da comparação'
-                            : 'Comparar'}
-                        </Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        onPress={(event) => {
-                          event.stopPropagation();
-                          alternarFavorito(item.id);
-                        }}
-                        style={{
-                          width: 29,
-                          height: 29,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          backgroundColor: '#fff7ed',
-                          borderRadius: 15,
-                          borderWidth: 1,
-                          borderColor: '#fed7aa',
-                        }}
-                      >
-                        <Ionicons
-                          name={
-                            favoritos.includes(
-                              String(item.id)
-                            )
-                              ? 'star'
-                              : 'star-outline'
-                          }
-                          size={20}
-                          color="#f59e0b"
-                        />
-                      </TouchableOpacity>
-                    </View>
-                  ) : null}
-                </View>
-              </TouchableOpacity>
-            )}
-          />
+          </View>
         )}
+        </ScrollView>
 
         {ehUsuarioComum(usuario) &&
         academiasComparacao.length > 0 ? (

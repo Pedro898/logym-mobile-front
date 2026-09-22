@@ -1,5 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Linking, Text, TouchableOpacity, View } from 'react-native';
+import {
+  APIProvider,
+  InfoWindow,
+  Map,
+  Marker,
+  useApiLoadingStatus,
+} from '@vis.gl/react-google-maps';
 
 type AcademyMapProps = {
   latitude?: string | number | null;
@@ -16,8 +23,11 @@ type LeafletRuntime = {
   Marker: any;
   Popup: any;
   TileLayer: any;
-  useMap: () => any;
 };
+
+const MAP_PROVIDER_STORAGE_KEY = 'logym_map_provider';
+const GOOGLE_PROVIDER = 'google';
+const LEAFLET_PROVIDER = 'leaflet';
 
 const LEAFLET_CSS_ID = 'logym-leaflet-css';
 const LEAFLET_CSS_URL = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
@@ -67,6 +77,133 @@ function getCoordenadasValidas(
   return [latitudeNumerica, longitudeNumerica];
 }
 
+function lerProviderDaSessao(googleDisponivel: boolean) {
+  if (!googleDisponivel || typeof sessionStorage === 'undefined') {
+    return LEAFLET_PROVIDER;
+  }
+
+  try {
+    return sessionStorage.getItem(MAP_PROVIDER_STORAGE_KEY) === LEAFLET_PROVIDER
+      ? LEAFLET_PROVIDER
+      : GOOGLE_PROVIDER;
+  } catch {
+    return GOOGLE_PROVIDER;
+  }
+}
+
+function criarIconeAcademiaGoogle() {
+  return {
+    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
+      '<svg width="28" height="39" viewBox="0 0 30 42" xmlns="http://www.w3.org/2000/svg"><path d="M15 0C6.716 0 0 6.716 0 15c0 11.25 15 27 15 27s15-15.75 15-27C30 6.716 23.284 0 15 0Z" fill="#343434"/><circle cx="15" cy="15" r="5" fill="#ffffff"/></svg>'
+    )}`,
+    scaledSize: { width: 28, height: 39 },
+    anchor: { x: 14, y: 39 },
+  };
+}
+
+const academyMarkerIconGoogle = criarIconeAcademiaGoogle();
+
+function AcademyGoogleMapContent({
+  coordenadas,
+  nome,
+  endereco,
+  onError,
+}: {
+  coordenadas: Coordenadas;
+  nome?: string;
+  endereco?: string;
+  onError: () => void;
+}) {
+  const [infoAberta, setInfoAberta] = useState(false);
+  const statusDaApi = useApiLoadingStatus();
+
+  useEffect(() => {
+    if (statusDaApi === 'FAILED' || statusDaApi === 'AUTH_FAILURE') {
+      onError();
+    }
+  }, [onError, statusDaApi]);
+
+  return (
+    <Map
+      defaultCenter={{ lat: coordenadas[0], lng: coordenadas[1] }}
+      defaultZoom={16}
+      gestureHandling="greedy"
+      disableDefaultUI={false}
+      streetViewControl={false}
+      mapTypeControl={false}
+      style={{ width: '100%', height: '100%' }}
+      onClick={() => setInfoAberta(false)}
+    >
+      <Marker
+        position={{ lat: coordenadas[0], lng: coordenadas[1] }}
+        icon={academyMarkerIconGoogle as any}
+        title={nome || 'Academia'}
+        onClick={() => setInfoAberta(true)}
+      />
+
+      {infoAberta ? (
+        <InfoWindow
+          position={{ lat: coordenadas[0], lng: coordenadas[1] }}
+          onClose={() => setInfoAberta(false)}
+          shouldFocus={false}
+        >
+          <div
+            style={{
+              minWidth: 160,
+              color: '#333',
+              fontFamily: 'Arial, Helvetica, sans-serif',
+              fontSize: 12,
+              lineHeight: 1.4,
+            }}
+          >
+            <strong
+              style={{
+                display: 'block',
+                color: '#151515',
+                fontSize: 14,
+              }}
+            >
+              {nome || 'Academia'}
+            </strong>
+
+            {endereco ? <p style={{ margin: '5px 0' }}>{endereco}</p> : null}
+          </div>
+        </InfoWindow>
+      ) : null}
+    </Map>
+  );
+}
+
+function AcademyGoogleMap({
+  apiKey,
+  coordenadas,
+  nome,
+  endereco,
+  onError,
+}: {
+  apiKey: string;
+  coordenadas: Coordenadas;
+  nome?: string;
+  endereco?: string;
+  onError: () => void;
+}) {
+  return (
+    <APIProvider
+      apiKey={apiKey}
+      language="pt-BR"
+      region="BR"
+      onError={onError}
+    >
+      <AcademyGoogleMapContent
+        coordenadas={coordenadas}
+        nome={nome}
+        endereco={endereco}
+        onError={onError}
+      />
+    </APIProvider>
+  );
+}
+
 function MapaLeaflet({
   runtime,
   coordenadas,
@@ -78,85 +215,61 @@ function MapaLeaflet({
   nome?: string;
   endereco?: string;
 }) {
-  const { L, MapContainer, Marker, Popup, TileLayer, useMap } = runtime;
+  const { L, MapContainer, Marker, Popup, TileLayer } = runtime;
 
   const academyMarkerIcon = useMemo(
     () =>
-      L.icon({
-        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-        iconSize: [25, 41],
-        iconAnchor: [12, 41],
-        popupAnchor: [1, -34],
-        shadowSize: [41, 41],
+      L.divIcon({
+        className: 'academy-location-marker',
+        html: `<svg width="28" height="39" viewBox="0 0 30 42" xmlns="http://www.w3.org/2000/svg"><path d="M15 0C6.716 0 0 6.716 0 15c0 11.25 15 27 15 27s15-15.75 15-27C30 6.716 23.284 0 15 0Z" fill="#343434"/><circle cx="15" cy="15" r="5" fill="#ffffff"/></svg>`,
+        iconSize: [28, 39],
+        iconAnchor: [14, 39],
+        popupAnchor: [0, -35],
       }),
     [L]
   );
 
-  function AjustarMapa() {
-    const map = useMap();
-
-    useEffect(() => {
-      const timer = window.setTimeout(() => {
-        map.invalidateSize();
-        map.setView(coordenadas, 16);
-      }, 0);
-
-      return () => window.clearTimeout(timer);
-    }, [map]);
-
-    return null;
-  }
-
   return (
-    <View
-      style={{
-        width: '100%',
-        height: 200,
-        overflow: 'hidden',
-        borderRadius: 14,
-        borderWidth: 1,
-        borderColor: '#dedede',
-        backgroundColor: '#f3f4f6',
-      }}
+    <MapContainer
+      center={coordenadas}
+      zoom={16}
+      scrollWheelZoom={false}
+      zoomAnimation={false}
+      fadeAnimation={false}
+      markerZoomAnimation={false}
+      style={{ width: '100%', height: '100%' }}
     >
-      <MapContainer
-        center={coordenadas}
-        zoom={16}
-        scrollWheelZoom={false}
-        style={{ width: '100%', height: '100%' }}
-      >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
+      <TileLayer
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      />
 
-        <AjustarMapa />
-
-        <Marker position={coordenadas} icon={academyMarkerIcon}>
-          <Popup>
-            <div
+      <Marker position={coordenadas} icon={academyMarkerIcon}>
+        <Popup>
+          <div
+            style={{
+              minWidth: 160,
+              color: '#333',
+              fontFamily: 'Arial, Helvetica, sans-serif',
+              fontSize: 12,
+              lineHeight: 1.4,
+            }}
+          >
+            <strong
               style={{
-                minWidth: 150,
-                color: '#000',
-                fontFamily: 'Arial, Helvetica, sans-serif',
+                display: 'block',
+                color: '#151515',
+                fontSize: 14,
               }}
             >
-              <strong style={{ display: 'block', marginBottom: 5 }}>
-                {nome || 'Academia'}
-              </strong>
+              {nome || 'Academia'}
+            </strong>
 
-              {endereco ? (
-                <p style={{ margin: '4px 0', fontSize: 12, lineHeight: 1.3 }}>
-                  {endereco}
-                </p>
-              ) : null}
-            </div>
-          </Popup>
-        </Marker>
-      </MapContainer>
-    </View>
+            {endereco ? <p style={{ margin: '5px 0' }}>{endereco}</p> : null}
+          </div>
+        </Popup>
+      </Marker>
+    </MapContainer>
   );
 }
 
@@ -166,6 +279,12 @@ export default function AcademyMap({
   nome,
   endereco,
 }: AcademyMapProps) {
+  const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY?.trim() || '';
+  const googleDisponivel = Boolean(apiKey);
+
+  const [providerAtivo, setProviderAtivo] = useState(() =>
+    lerProviderDaSessao(googleDisponivel)
+  );
   const [runtime, setRuntime] = useState<LeafletRuntime | null>(null);
 
   useEffect(() => {
@@ -191,11 +310,10 @@ export default function AcademyMap({
           Marker: reactLeafletModule.Marker,
           Popup: reactLeafletModule.Popup,
           TileLayer: reactLeafletModule.TileLayer,
-          useMap: reactLeafletModule.useMap,
         });
       })
       .catch((error) => {
-        console.error('Erro ao carregar o mapa da academia:', error);
+        console.error('Erro ao carregar o mapa alternativo da academia:', error);
       });
 
     return () => {
@@ -207,6 +325,20 @@ export default function AcademyMap({
     () => getCoordenadasValidas(latitude, longitude),
     [latitude, longitude]
   );
+
+  const selecionarProvider = useCallback((provider: string) => {
+    setProviderAtivo(provider);
+
+    try {
+      sessionStorage.setItem(MAP_PROVIDER_STORAGE_KEY, provider);
+    } catch {
+      // Se o navegador bloquear sessionStorage, a troca ainda funciona na tela atual.
+    }
+  }, []);
+
+  const ativarFallbackLeaflet = useCallback(() => {
+    selecionarProvider(LEAFLET_PROVIDER);
+  }, [selecionarProvider]);
 
   if (!coordenadas) {
     return (
@@ -221,31 +353,142 @@ export default function AcademyMap({
     );
   }
 
-  if (!runtime) {
-    return (
+  const usandoGoogle = providerAtivo === GOOGLE_PROVIDER && googleDisponivel;
+  const textoProvider = usandoGoogle ? 'Google Maps' : 'Mapa alternativo';
+  const textoBotao = usandoGoogle ? 'Usar mapa alternativo' : 'Usar Google Maps';
+
+  const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${coordenadas[0]},${coordenadas[1]}`;
+
+  async function abrirComoChegar() {
+    try {
+      await Linking.openURL(directionsUrl);
+    } catch (error) {
+      console.error('Não foi possível abrir o Google Maps:', error);
+    }
+  }
+
+  return (
+    <View style={{ width: '100%' }}>
       <View
         style={{
           width: '100%',
           height: 200,
+          overflow: 'hidden',
           borderRadius: 14,
           borderWidth: 1,
           borderColor: '#dedede',
-          backgroundColor: '#fafafa',
-          alignItems: 'center',
-          justifyContent: 'center',
+          backgroundColor: '#f3f4f6',
         }}
       >
-        <Text style={{ color: '#666', fontSize: 14 }}>Carregando mapa...</Text>
+        {usandoGoogle ? (
+          <AcademyGoogleMap
+            apiKey={apiKey}
+            coordenadas={coordenadas}
+            nome={nome}
+            endereco={endereco}
+            onError={ativarFallbackLeaflet}
+          />
+        ) : typeof window === 'undefined' || !runtime ? (
+          <View
+            style={{
+              width: '100%',
+              height: '100%',
+              backgroundColor: '#f3f4f6',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Text style={{ color: '#666', fontSize: 14 }}>Carregando mapa...</Text>
+          </View>
+        ) : (
+          <MapaLeaflet
+            runtime={runtime}
+            coordenadas={coordenadas}
+            nome={nome}
+            endereco={endereco}
+          />
+        )}
       </View>
-    );
-  }
 
-  return (
-    <MapaLeaflet
-      runtime={runtime}
-      coordenadas={coordenadas}
-      nome={nome}
-      endereco={endereco}
-    />
+      <View
+        style={{
+          marginTop: 10,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 10,
+        }}
+      >
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={abrirComoChegar}
+          style={{
+            paddingVertical: 7,
+            paddingHorizontal: 11,
+            borderRadius: 7,
+            backgroundColor: '#f97316',
+            borderWidth: 1,
+            borderColor: '#f97316',
+          }}
+        >
+          <Text
+            style={{
+              color: '#111',
+              fontSize: 12,
+              fontWeight: '900',
+            }}
+          >
+            Como chegar
+          </Text>
+        </TouchableOpacity>
+
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            gap: 8,
+            flexShrink: 1,
+          }}
+        >
+          <Text
+            style={{
+              color: '#777',
+              fontSize: 11.5,
+              fontWeight: '600',
+            }}
+          >
+            {textoProvider}
+          </Text>
+
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() =>
+              selecionarProvider(usandoGoogle ? LEAFLET_PROVIDER : GOOGLE_PROVIDER)
+            }
+            disabled={!usandoGoogle && !googleDisponivel}
+            style={{
+              paddingVertical: 5,
+              paddingHorizontal: 9,
+              borderWidth: 1,
+              borderColor: '#e1b28f',
+              borderRadius: 7,
+              backgroundColor: '#fffaf7',
+              opacity: !usandoGoogle && !googleDisponivel ? 0.6 : 1,
+            }}
+          >
+            <Text
+              style={{
+                color: '#8c3906',
+                fontSize: 11.5,
+                fontWeight: '800',
+              }}
+            >
+              {textoBotao}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
   );
 }

@@ -74,11 +74,11 @@ export default function ComparisonBar({
 
         borderColor: '#2e2e2e',
 
-        borderRadius: 14,
+        borderRadius: 10,
 
-        paddingHorizontal: 12,
+        paddingHorizontal: 8,
 
-        paddingVertical: 10,
+        paddingVertical: 5,
 
         shadowColor: '#000',
 
@@ -98,11 +98,11 @@ export default function ComparisonBar({
         style={{
           color: '#ffffff',
 
-          fontSize: 13,
+          fontSize: 11,
 
           fontWeight: '900',
 
-          marginBottom: 7,
+          marginBottom: 3,
         }}
       >
         Comparação (
@@ -116,9 +116,9 @@ export default function ComparisonBar({
           false
         }
         contentContainerStyle={{
-          gap: 6,
+          gap: 4,
 
-          paddingBottom: 8,
+          paddingBottom: 4,
         }}
       >
         {academiasSelecionadas.map(
@@ -128,7 +128,7 @@ export default function ComparisonBar({
                 academia.id
               )}
               style={{
-                maxWidth: 190,
+                maxWidth: 155,
 
                 flexDirection:
                   'row',
@@ -141,11 +141,11 @@ export default function ComparisonBar({
 
                 borderRadius: 999,
 
-                paddingVertical: 5,
+                paddingVertical: 3,
 
-                paddingLeft: 9,
+                paddingLeft: 7,
 
-                paddingRight: 5,
+                paddingRight: 4,
               }}
             >
               <Text
@@ -153,12 +153,12 @@ export default function ComparisonBar({
                 style={{
                   color: '#fff',
 
-                  fontSize: 11,
+                  fontSize: 10,
 
                   fontWeight:
                     '700',
 
-                  maxWidth: 135,
+                  maxWidth: 122,
                 }}
               >
                 {academia.nome}
@@ -172,9 +172,9 @@ export default function ComparisonBar({
                 }
                 accessibilityLabel={`Remover ${academia.nome} da comparação`}
                 style={{
-                  width: 23,
+                  width: 18,
 
-                  height: 23,
+                  height: 18,
 
                   alignItems:
                     'center',
@@ -189,9 +189,9 @@ export default function ComparisonBar({
                   style={{
                     color: '#fff',
 
-                    fontSize: 18,
+                    fontSize: 14,
 
-                    lineHeight: 20,
+                    lineHeight: 16,
 
                     fontWeight:
                       '800',
@@ -214,22 +214,22 @@ export default function ComparisonBar({
 
           alignItems: 'center',
 
-          gap: 8,
+          gap: 5,
         }}
       >
         <TouchableOpacity
           onPress={onLimpar}
           style={{
-            paddingVertical: 8,
+            paddingVertical: 4,
 
-            paddingHorizontal: 8,
+            paddingHorizontal: 6,
           }}
         >
           <Text
             style={{
               color: '#fff',
 
-              fontSize: 12,
+              fontSize: 11,
 
               fontWeight: '800',
             }}
@@ -250,11 +250,11 @@ export default function ComparisonBar({
             borderColor:
               '#f97316',
 
-            borderRadius: 7,
+            borderRadius: 6,
 
-            paddingVertical: 9,
+            paddingVertical: 5,
 
-            paddingHorizontal: 12,
+            paddingHorizontal: 8,
 
             opacity:
               podeComparar
@@ -266,7 +266,7 @@ export default function ComparisonBar({
             style={{
               color: '#000',
 
-              fontSize: 12,
+              fontSize: 11,
 
               fontWeight: '900',
             }}

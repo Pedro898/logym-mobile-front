@@ -18,9 +18,8 @@ import LogymBackground from '../components/LogymBackground';
 import {
   alternarFavoritoNoBanco,
   buscarFavoritosDoUsuario,
-  buscarPrimeiraFotoAcademia,
   buscarUsuarioAutenticado,
-  getFotoAcademiaUrl,
+  getFotoPrincipalAcademiaUrl,
   type Academia,
   type Usuario,
 } from '@/lib/api';
@@ -146,32 +145,13 @@ export default function Favoritos() {
           // Busca as academias favoritas reais do banco.
           const academiasBanco = await buscarFavoritosDoUsuario(usuarioLogado.id);
 
-          // Para cada academia favorita, tenta buscar a primeira foto cadastrada.
-          // Se não tiver foto, fotoUrl fica null e mostramos o fallback com a inicial.
-          const academiasComFotos = await Promise.all(
-            academiasBanco.map(async (academia) => {
-              try {
-                const primeiraFoto = await buscarPrimeiraFotoAcademia(academia.id);
-
-                return {
-                  ...academia,
-                  fotoUrl: primeiraFoto
-                    ? getFotoAcademiaUrl(primeiraFoto.id)
-                    : null,
-                };
-              } catch (error) {
-                console.error(
-                  `Erro ao buscar foto da academia favorita ${academia.id}:`,
-                  error
-                );
-
-                return {
-                  ...academia,
-                  fotoUrl: null,
-                };
-              }
-            })
-          );
+          // Mesmo comportamento dos cards da Home/Web atual:
+          // usa diretamente a fotoPrincipal que o backend envia
+          // junto com cada academia favorita.
+          const academiasComFotos = academiasBanco.map((academia) => ({
+            ...academia,
+            fotoUrl: getFotoPrincipalAcademiaUrl(academia.fotoPrincipal),
+          }));
 
           setAcademiasFavoritas(academiasComFotos);
         } catch (error) {

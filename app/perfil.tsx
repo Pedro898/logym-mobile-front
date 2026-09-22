@@ -1001,45 +1001,49 @@ export default function Perfil() {
                   Editar perfil
                 </Text>
               </TouchableOpacity>
-            ) : houveAlteracao ? (
-              <TouchableOpacity
-                onPress={salvarPerfil}
-                disabled={salvando || buscandoCep}
-                style={{
-                  backgroundColor: salvando || buscandoCep ? '#777' : '#f97316',
-                  minHeight: 49,
-                  borderRadius: 10,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  marginBottom: 10,
-                }}
-              >
-                {salvando ? (
-                  <ActivityIndicator color="#000" />
-                ) : (
-                  <Text style={{ color: '#000', fontWeight: '900', fontSize: 14 }}>
-                    Salvar alterações
-                  </Text>
-                )}
-              </TouchableOpacity>
             ) : (
-              <TouchableOpacity
-                onPress={cancelarEdicao}
-                disabled={buscandoCep}
-                style={{
-                  backgroundColor: '#000',
-                  minHeight: 49,
-                  borderRadius: 10,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  marginBottom: 10,
-                  opacity: buscandoCep ? 0.6 : 1,
-                }}
-              >
-                <Text style={{ color: '#fff', fontWeight: '900', fontSize: 14 }}>
-                  Cancelar edição
-                </Text>
-              </TouchableOpacity>
+              <>
+                <TouchableOpacity
+                  onPress={salvarPerfil}
+                  disabled={!houveAlteracao || salvando || buscandoCep}
+                  style={{
+                    backgroundColor:
+                      !houveAlteracao || salvando || buscandoCep ? '#d1d5db' : '#f97316',
+                    minHeight: 49,
+                    borderRadius: 10,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: 10,
+                    opacity: !houveAlteracao || salvando || buscandoCep ? 0.75 : 1,
+                  }}
+                >
+                  {salvando ? (
+                    <ActivityIndicator color="#000" />
+                  ) : (
+                    <Text style={{ color: '#000', fontWeight: '900', fontSize: 14 }}>
+                      Salvar alterações
+                    </Text>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={cancelarEdicao}
+                  disabled={salvando || buscandoCep}
+                  style={{
+                    backgroundColor: '#000',
+                    minHeight: 49,
+                    borderRadius: 10,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: 10,
+                    opacity: salvando || buscandoCep ? 0.6 : 1,
+                  }}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '900', fontSize: 14 }}>
+                    Cancelar edição
+                  </Text>
+                </TouchableOpacity>
+              </>
             )}
 
             <TouchableOpacity

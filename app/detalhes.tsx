@@ -646,7 +646,9 @@ export default function Detalhes() {
   async function carregarFotosAcademia(
     academiaId:
       | string
-      | number
+      | number,
+    fotoPrincipal?:
+      Academia['fotoPrincipal']
   ) {
     try {
       const fotosBanco =
@@ -731,8 +733,77 @@ export default function Detalhes() {
               foto !== null
           );
 
+      // ==========================================================
+      // FOTO PRINCIPAL SEMPRE PRIMEIRO NA GALERIA
+      // ==========================================================
+
+      const fotoPrincipalUrl =
+        getFotoPrincipalAcademiaUrl(
+          fotoPrincipal
+        );
+
+      const fotoPrincipalId =
+        typeof fotoPrincipal === 'object' &&
+        fotoPrincipal?.id
+          ? String(
+              fotoPrincipal.id
+            )
+          : typeof fotoPrincipal === 'number'
+            ? String(
+                fotoPrincipal
+              )
+            : typeof fotoPrincipal === 'string' &&
+                /^\d+$/.test(
+                  fotoPrincipal.trim()
+                )
+              ? fotoPrincipal.trim()
+              : null;
+
+      const galeriaOrdenada =
+        [...galeria].sort(
+          (
+            fotoA,
+            fotoB
+          ) => {
+            const fotoAEhPrincipal =
+              (
+                fotoPrincipalId &&
+                String(fotoA.id) ===
+                  fotoPrincipalId
+              ) ||
+              (
+                fotoPrincipalUrl &&
+                fotoA.url ===
+                  fotoPrincipalUrl
+              );
+
+            const fotoBEhPrincipal =
+              (
+                fotoPrincipalId &&
+                String(fotoB.id) ===
+                  fotoPrincipalId
+              ) ||
+              (
+                fotoPrincipalUrl &&
+                fotoB.url ===
+                  fotoPrincipalUrl
+              );
+
+            if (
+              fotoAEhPrincipal ===
+              fotoBEhPrincipal
+            ) {
+              return 0;
+            }
+
+            return fotoAEhPrincipal
+              ? -1
+              : 1;
+          }
+        );
+
       setFotosAcademia(
-        galeria
+        galeriaOrdenada
       );
 
       // Sempre inicia pela primeira.
@@ -892,7 +963,8 @@ export default function Detalhes() {
           carregarItensAvaliacao(),
 
           carregarFotosAcademia(
-            id
+            id,
+            academiaBanco.fotoPrincipal
           ),
         ]);
       } catch (error) {

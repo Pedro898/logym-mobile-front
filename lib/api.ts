@@ -70,6 +70,7 @@ export type Academia = {
   facilidadesVinculadas?: Facilidade[];
 
   nota?: number | null;
+  distanciaKm?: number | string | null;
   statusAcademia?: string;
 
   // Foto principal já enviada pelo backend junto com a academia.
@@ -84,6 +85,27 @@ export type Academia = {
 export type AcademiaProxima = {
   academia: Academia;
   distanciaKm: number | string;
+};
+
+// ================================================================
+// PÁGINA DE ACADEMIAS DA HOME
+//
+// Mesmo contrato retornado pelo backend em GET /academias/home.
+// ================================================================
+
+export type PaginaAcademias = {
+  content: Academia[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+};
+
+export type BuscarAcademiasHomeParams = {
+  page?: number;
+  search?: string;
+  categorias?: Array<string | number>;
+  facilidades?: Array<string | number>;
 };
 
 // ================================================================
@@ -1105,6 +1127,42 @@ export async function buscarFacilidadesAtivas() {
 export async function buscarAcademias() {
   return request<Academia[]>(
     '/academias'
+  );
+}
+
+// ================================================================
+// ACADEMIAS DA HOME COM BUSCA, FILTROS E PAGINAÇÃO
+//
+// Mesmo endpoint usado pelo Web atual. A pesquisa, os filtros de
+// categorias/facilidades e a paginação são processados no backend.
+// ================================================================
+
+export async function buscarAcademiasParaHome({
+  page = 0,
+  search = '',
+  categorias = [],
+  facilidades = [],
+}: BuscarAcademiasHomeParams = {}) {
+  const params = new URLSearchParams();
+
+  params.set('page', String(page));
+
+  const termoBusca = search.trim();
+
+  if (termoBusca) {
+    params.set('search', termoBusca);
+  }
+
+  categorias.forEach((categoriaId) => {
+    params.append('categorias', String(categoriaId));
+  });
+
+  facilidades.forEach((facilidadeId) => {
+    params.append('facilidades', String(facilidadeId));
+  });
+
+  return request<PaginaAcademias>(
+    `/academias/home?${params.toString()}`
   );
 }
 
