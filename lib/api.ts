@@ -340,9 +340,9 @@ function buscarApiUrl() {
   // do computador.
   // ==============================================================
 
-  if (Platform.OS === 'android') {
-    return 'http://10.0.2.2:8080';
-  }
+ if (Platform.OS === 'android') {
+  return 'http://192.168.137.1:8080';
+}
 
   // ==============================================================
   // FALLBACK

@@ -4,8 +4,8 @@
     "slug": "LogymApp",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/logoSimples.png",
-    "scheme": "LogymApp",
+    "icon": "./assets/images/icon-logym.png",
+    "scheme": "logymapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -14,10 +14,11 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#000000",
-        "foregroundImage": "./assets/images/logoSimples.png"
+        "foregroundImage": "./assets/images/icon-logym.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.anonymous.LogymApp"
     },
     "web": {
       "output": "static",
@@ -36,7 +37,9 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      "expo-font",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,
